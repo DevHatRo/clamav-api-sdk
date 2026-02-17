@@ -176,10 +176,16 @@ export class ClamAVGrpcClient implements IClamAVClient {
   }
 
   async *scanMultiple(files: FileEntry[], options?: RequestOptions): AsyncIterable<ScanResult> {
-    const results: ScanResult[] = [];
-    let resolveNext: (() => void) | null = null;
-    let done = false;
-    let streamError: Error | null = null;
+    const state = {
+      results: [] as ScanResult[],
+      resolveNext: null as (() => void) | null,
+      done: false,
+      error: null as Error | null,
+    };
+
+    const notify = () => {
+      state.resolveNext?.();
+    };
 
     const callOptions = this.buildCallOptions(options);
     const call = this.client.scanMultiple(callOptions);
@@ -187,19 +193,19 @@ export class ClamAVGrpcClient implements IClamAVClient {
     this.wireAbortSignal(call, options?.signal);
 
     call.on('data', (response: GrpcScanResponse) => {
-      results.push(this.toScanResult(response));
-      resolveNext?.();
+      state.results.push(this.toScanResult(response));
+      notify();
     });
 
     call.on('error', (error: grpc.ServiceError) => {
-      streamError = this.mapGrpcError(error);
-      done = true;
-      resolveNext?.();
+      state.error = this.mapGrpcError(error);
+      state.done = true;
+      notify();
     });
 
     call.on('end', () => {
-      done = true;
-      resolveNext?.();
+      state.done = true;
+      notify();
     });
 
     // Send all files as chunks
@@ -210,25 +216,28 @@ export class ClamAVGrpcClient implements IClamAVClient {
           await this.sendStreamChunks(call, stream, file.filename);
         }
         call.end();
-      } catch {
+      } catch (err) {
+        state.error = err instanceof Error ? err : new Error(String(err));
+        state.done = true;
         call.cancel();
+        notify();
       }
     })();
 
     let yielded = 0;
     while (true) {
-      if (yielded < results.length) {
-        yield results[yielded++];
+      if (yielded < state.results.length) {
+        yield state.results[yielded++];
         continue;
       }
 
-      if (done && yielded >= results.length) {
-        if (streamError) throw streamError;
+      if (state.done && yielded >= state.results.length) {
+        if (state.error) throw state.error;
         return;
       }
 
       await new Promise<void>((r) => {
-        resolveNext = r;
+        state.resolveNext = r;
       });
     }
   }
@@ -243,18 +252,26 @@ export class ClamAVGrpcClient implements IClamAVClient {
     stream: Readable,
     filename: string,
   ): Promise<void> {
-    const chunks: Buffer[] = [];
+    let prevChunk: Buffer | null = null;
+    let isFirst = true;
+
     for await (const chunk of chunkStream(stream, CHUNK_SIZE)) {
-      chunks.push(chunk);
+      if (prevChunk !== null) {
+        call.write({
+          chunk: prevChunk,
+          filename: isFirst ? filename : '',
+          isLast: false,
+        });
+        isFirst = false;
+      }
+      prevChunk = chunk;
     }
 
-    for (let i = 0; i < chunks.length; i++) {
-      const isFirst = i === 0;
-      const isLast = i === chunks.length - 1;
+    if (prevChunk !== null) {
       call.write({
-        chunk: chunks[i],
+        chunk: prevChunk,
         filename: isFirst ? filename : '',
-        isLast,
+        isLast: true,
       });
     }
   }

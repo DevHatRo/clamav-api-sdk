@@ -4,24 +4,38 @@ const DEFAULT_CHUNK_SIZE = 64 * 1024; // 64KB
 
 /**
  * Async generator that yields Buffer chunks from a Readable stream.
+ * Uses an array-based accumulator to avoid O(n^2) Buffer.concat on every data event.
  */
 export async function* chunkStream(
   source: Readable,
   chunkSize: number = DEFAULT_CHUNK_SIZE,
 ): AsyncGenerator<Buffer> {
-  let buffer = Buffer.alloc(0);
+  const pending: Buffer[] = [];
+  let pendingBytes = 0;
 
   for await (const data of source) {
-    buffer = Buffer.concat([buffer, Buffer.isBuffer(data) ? data : Buffer.from(data)]);
+    const buf = Buffer.isBuffer(data) ? data : Buffer.from(data);
+    pending.push(buf);
+    pendingBytes += buf.length;
 
-    while (buffer.length >= chunkSize) {
-      yield buffer.subarray(0, chunkSize);
-      buffer = buffer.subarray(chunkSize);
+    while (pendingBytes >= chunkSize) {
+      const merged = pending.length === 1 ? pending[0] : Buffer.concat(pending);
+      pending.length = 0;
+
+      yield merged.subarray(0, chunkSize);
+
+      const remainder = merged.subarray(chunkSize);
+      if (remainder.length > 0) {
+        pending.push(remainder);
+        pendingBytes = remainder.length;
+      } else {
+        pendingBytes = 0;
+      }
     }
   }
 
-  if (buffer.length > 0) {
-    yield buffer;
+  if (pendingBytes > 0) {
+    yield pending.length === 1 ? pending[0] : Buffer.concat(pending);
   }
 }
 
