@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.1](https://github.com/DevHatRo/clamav-api-sdk-node/compare/v1.0.0...v1.0.1) (2026-03-27)
+
+
+### Bug Fixes
+
+* strip Content-Type header for FormData requests in scanFile ([#4](https://github.com/DevHatRo/clamav-api-sdk-node/issues/4)) ([03c3691](https://github.com/DevHatRo/clamav-api-sdk-node/commit/03c3691f2c56c141a64a656a253b15162a1a77a2))
+
 ## 1.0.0 (2026-02-17)
 
 
