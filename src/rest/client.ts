@@ -169,6 +169,11 @@ export class ClamAVRestClient implements IClamAVClient {
       ...(init.headers as Record<string, string>),
     };
 
+    if (init.body instanceof FormData) {
+      delete headers['Content-Type'];
+      delete headers['content-type'];
+    }
+
     try {
       const response = await globalThis.fetch(url, {
         ...init,
