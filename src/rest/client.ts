@@ -170,8 +170,11 @@ export class ClamAVRestClient implements IClamAVClient {
     };
 
     if (init.body instanceof FormData) {
-      delete headers['Content-Type'];
-      delete headers['content-type'];
+      Object.keys(headers).forEach(key => {
+        if (key.toLowerCase() === 'content-type') {
+          delete headers[key];
+        }
+      });
     }
 
     try {
