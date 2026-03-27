@@ -357,6 +357,22 @@ describe('ClamAVRestClient', () => {
       const headers = init.headers as Record<string, string>;
       expect(headers['X-Custom']).toBe('value');
     });
+
+    it('should not override Content-Type for multipart requests', async () => {
+      const customClient = new ClamAVRestClient({
+        url: 'http://localhost:6000',
+        headers: { 'Content-Type': 'application/json', 'X-Custom': 'value' },
+      });
+
+      fetchSpy.mockResolvedValueOnce(mockFetchResponse({ status: 'OK', message: '', time: 0.001 }));
+      await customClient.scanFile(Buffer.from('content'), 'test.txt');
+
+      const call = fetchSpy.mock.calls[0];
+      const init = call[1] as RequestInit;
+      const headers = init.headers as Record<string, string>;
+      expect(headers['Content-Type']).toBeUndefined();
+      expect(headers['X-Custom']).toBe('value');
+    });
   });
 
   describe('URL handling', () => {
