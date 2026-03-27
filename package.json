@@ -1,6 +1,6 @@
 {
   "name": "@devhatro/clamav-api-sdk",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Production-ready Node.js SDK for ClamAV API — REST and gRPC clients for antivirus scanning",
   "type": "module",
   "main": "./dist/index.cjs",
